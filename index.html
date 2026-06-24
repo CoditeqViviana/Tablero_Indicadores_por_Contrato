@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tablero de Indicadores por Contrato</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#101c2e; --ink-2:#1b2c44; --ink-3:#26384f;
+    --paper:#f6f6f2; --card:#ffffff;
+    --line:#e3e5e1; --line-strong:#cfd2cd;
+    --text:#19212e; --muted:#6c7686; --faint:#9aa3b0;
+    --fact:#0e7c7b; --fact-soft:#e3f1f0;
+    --tru:#bd7a12;  --tru-soft:#f7ecd9;
+    --auto:#6b4e9e; --auto-soft:#ece6f5;
+    --cost:#5b6b7d; --cost-soft:#e9edf1;
+    --good:#1c7c54; --bad:#b23b3b;
+    --shadow:0 1px 2px rgba(16,28,46,.06),0 8px 24px rgba(16,28,46,.06);
+    --r:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:var(--paper); color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    display:flex; min-height:100vh;
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+  /* ---------- Sidebar ---------- */
+  .rail{
+    width:248px; flex:0 0 248px; background:var(--ink); color:#dfe5ee;
+    display:flex; flex-direction:column; position:sticky; top:0; height:100vh;
+    padding:26px 18px;
+  }
+  .brand{display:flex; flex-direction:column; gap:2px; padding:0 6px 22px; border-bottom:1px solid rgba(255,255,255,.08)}
+  .brand .mark{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px;
+    letter-spacing:-.01em; color:#fff; display:flex; align-items:center; gap:9px;
+  }
+  .brand .mark::before{content:""; width:11px; height:11px; border-radius:3px;
+    background:linear-gradient(135deg,var(--fact),var(--tru)); box-shadow:0 0 0 3px rgba(255,255,255,.06)}
+  .brand .sub{font-size:11.5px; color:#8290a6; letter-spacing:.02em; padding-left:20px}
+
+  .navlabel{font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#6b7a92; margin:24px 8px 8px}
+  .nav{display:flex; flex-direction:column; gap:3px}
+  .nav button{
+    all:unset; cursor:pointer; display:flex; align-items:center; gap:11px;
+    padding:10px 12px; border-radius:10px; font-size:14px; color:#c4ccd9;
+    font-weight:500; transition:background .15s,color .15s;
+  }
+  .nav button .dot{width:7px;height:7px;border-radius:50%;background:#3c4d66;flex:0 0 7px;transition:background .15s}
+  .nav button:hover{background:rgba(255,255,255,.05); color:#fff}
+  .nav button.active{background:var(--ink-2); color:#fff}
+  .nav button.active .dot{background:var(--fact)}
+  .nav button[data-c="quala"].active .dot{background:var(--fact)}
+  .nav button[data-c="colombina"].active .dot{background:var(--tru)}
+  .nav button[data-c="noel"].active .dot{background:var(--auto)}
+  .nav button.navguide{margin-top:10px; padding-top:14px; border-top:1px solid rgba(255,255,255,.08)}
+  .nav button.navguide.active .dot{background:#9fb0c6}
+  .nav button:focus-visible{outline:2px solid #6f9; outline-offset:2px}
+
+  .rail-foot{margin-top:auto; font-size:11px; color:#5e6c83; line-height:1.5; padding:14px 8px 0; border-top:1px solid rgba(255,255,255,.08)}
+  .rail-foot b{color:#9fb0c6; font-weight:600}
+
+  /* ---------- Main ---------- */
+  .main{flex:1; min-width:0; display:flex; flex-direction:column}
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap;
+    padding:20px 34px; background:rgba(246,246,242,.86); backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20;
+  }
+  .topbar h1{font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:600; letter-spacing:-.01em}
+  .topbar .ctx{font-size:12.5px; color:var(--muted); margin-top:2px}
+  .monthbox{display:flex; align-items:center; gap:9px; flex:0 0 auto}
+  .monthbox[hidden]{display:none}
+  .monthbox label{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:600}
+  .monthbox select{
+    font-family:'Space Grotesk',sans-serif; font-size:13.5px; font-weight:500; color:var(--text);
+    background:var(--card); border:1px solid var(--line-strong); border-radius:10px;
+    padding:9px 34px 9px 13px; cursor:pointer; box-shadow:var(--shadow); -webkit-appearance:none; appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c7686' stroke-width='2.4'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center;
+  }
+  .monthbox select:hover{border-color:var(--fact)}
+  .monthbox select:focus-visible{outline:2px solid var(--fact); outline-offset:1px}
+
+  .content{padding:30px 34px 64px; max-width:1180px; width:100%}
+
+  /* ---------- Upload ---------- */
+  .loaders{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-bottom:8px}
+  @media(max-width:860px){.loaders{grid-template-columns:1fr}}
+  .drop{
+    background:var(--card); border:1.5px dashed var(--line-strong); border-radius:var(--r);
+    padding:22px; display:flex; gap:15px; align-items:center; cursor:pointer;
+    transition:border-color .18s, background .18s, box-shadow .18s;
+  }
+  .drop:hover{border-color:var(--fact); background:#fff}
+  .drop.drag{border-color:var(--fact); background:var(--fact-soft); border-style:solid}
+  .drop.ready{border-style:solid; border-color:var(--line); box-shadow:var(--shadow)}
+  .drop .ic{
+    width:46px;height:46px;border-radius:11px;flex:0 0 46px; display:grid;place-items:center;
+    background:#eef1ee; color:var(--muted); transition:.18s;
+  }
+  .drop.ready .ic{background:var(--fact-soft); color:var(--fact)}
+  .drop .ic svg{width:22px;height:22px}
+  .drop .meta{min-width:0}
+  .drop .meta .t{font-weight:600; font-size:14px; font-family:'Space Grotesk',sans-serif}
+  .drop .meta .d{font-size:12.5px; color:var(--muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .drop.ready .meta .d{color:var(--good); font-weight:500}
+  .drop .meta .d.err{color:var(--bad)}
+  .drop input{display:none}
+
+  .hint{font-size:12.5px; color:var(--muted); margin:14px 2px 26px; display:flex; gap:8px; align-items:flex-start}
+  .hint svg{width:15px;height:15px;flex:0 0 15px;margin-top:1px;color:var(--faint)}
+
+  /* ---------- Empty state ---------- */
+  .empty{
+    text-align:center; padding:60px 20px; color:var(--muted);
+    border:1px solid var(--line); border-radius:var(--r); background:var(--card);
+  }
+  .empty .big{font-family:'Space Grotesk',sans-serif; font-size:17px; color:var(--text); font-weight:600; margin-bottom:6px}
+
+  /* ---------- KPI cards ---------- */
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:18px; margin:6px 0 26px}
+  @media(max-width:520px){.kpis{grid-template-columns:1fr}}
+  .kpi{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--r);
+    padding:20px 20px 18px; position:relative; overflow:hidden; box-shadow:var(--shadow);
+  }
+  .kpi::before{content:""; position:absolute; top:0; left:0; right:0; height:3px}
+  .kpi.fact::before{background:var(--fact)} .kpi.tru::before{background:var(--tru)} .kpi.auto::before{background:var(--auto)} .kpi.cost::before{background:var(--cost)}
+  .kpi .lab{font-size:11.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:600; display:flex; align-items:center; gap:7px; flex-wrap:wrap}
+  .kpi .lab .sub{flex-basis:100%; text-transform:none; letter-spacing:0; font-weight:600; color:var(--auto); font-size:11px; margin-top:3px}
+  .kpi .lab .tag{width:8px;height:8px;border-radius:2px}
+  .kpi.fact .lab .tag{background:var(--fact)} .kpi.tru .lab .tag{background:var(--tru)} .kpi.auto .lab .tag{background:var(--auto)} .kpi.cost .lab .tag{background:var(--cost)}
+  .kpi .val{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:21px; letter-spacing:-.03em; margin-top:14px; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .kpi .note{font-size:12px; color:var(--faint); margin-top:7px}
+
+  /* ---------- Section / table ---------- */
+  .sec-h{display:flex; align-items:baseline; justify-content:space-between; margin:30px 2px 14px}
+  .sec-h h2{font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:600; letter-spacing:.01em}
+  .sec-h .meta{font-size:12px; color:var(--muted)}
+
+  table{width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; box-shadow:var(--shadow)}
+  .tscroll{overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:var(--r)}
+  thead th{
+    background:#fbfbf9; font-family:'Space Grotesk',sans-serif; font-size:10.5px; letter-spacing:.04em;
+    text-transform:uppercase; color:var(--muted); font-weight:600; text-align:right; padding:11px 12px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  thead th:first-child{text-align:left}
+  tbody td{padding:11px 12px; font-size:12.5px; text-align:right; border-bottom:1px solid #eef0ed; font-variant-numeric:tabular-nums; font-family:'IBM Plex Mono',monospace; white-space:nowrap; letter-spacing:-.02em}
+  tbody td:first-child{text-align:left; font-family:'Inter',sans-serif; color:var(--text); white-space:normal; letter-spacing:0}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr.total td{font-weight:600; background:#fbfbf9; border-top:1.5px solid var(--line-strong)}
+  tbody tr.total td:first-child{font-family:'Space Grotesk',sans-serif}
+  .cName{display:flex;align-items:center;gap:9px}
+  .cName .sw{width:9px;height:9px;border-radius:2px;flex:0 0 9px}
+  td.pos{color:var(--good)} td.neg{color:var(--bad)}
+  .muted-cell{color:var(--faint)!important}
+
+  /* mini bars in resumen */
+  .barwrap{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+  .bar{height:7px;border-radius:4px;background:var(--line);position:relative;width:90px;overflow:hidden;flex:0 0 90px}
+  .bar > span{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+
+  /* criterios panel */
+  details.crit{margin-top:30px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  details.crit summary{cursor:pointer;padding:15px 18px;font-size:13px;font-weight:600;font-family:'Space Grotesk',sans-serif;display:flex;align-items:center;gap:9px;list-style:none}
+  details.crit summary::-webkit-details-marker{display:none}
+  details.crit summary .chev{transition:transform .2s;color:var(--muted)}
+  details.crit[open] summary .chev{transform:rotate(90deg)}
+  details.crit .body{padding:4px 18px 18px;font-size:12.5px;color:var(--muted);line-height:1.65}
+  details.crit code{font-family:'IBM Plex Mono',monospace;background:#f1f2ef;padding:1px 6px;border-radius:5px;color:var(--text);font-size:12px}
+
+  .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .pill{font-size:11.5px;background:#f1f2ef;border:1px solid var(--line);border-radius:20px;padding:4px 11px;color:var(--text);font-family:'IBM Plex Mono',monospace}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 20px;border-radius:11px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:.25s;z-index:50}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* Guía rápida */
+  .guide{display:flex; flex-direction:column; gap:22px}
+  .guide-card{background:var(--card); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); overflow:hidden}
+  .guide-h{padding:18px 22px 14px; border-bottom:1px solid var(--line)}
+  .guide-h h3{font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:600}
+  .guide-sub{display:block; font-size:12.5px; color:var(--muted); margin-top:3px}
+  .guide-ol{list-style:none; padding:14px 22px 20px; margin:0; display:flex; flex-direction:column; gap:12px}
+  .guide-ol li{display:flex; gap:12px; align-items:flex-start; font-size:13.5px; line-height:1.5; color:var(--text)}
+  .ol-n{flex:0 0 22px; width:22px; height:22px; border-radius:7px; background:var(--ink); color:#fff; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:12px; display:grid; place-items:center; margin-top:1px}
+  .routes{display:flex; flex-direction:column}
+  .route{border-bottom:1px solid var(--line)}
+  .route:last-child{border-bottom:none}
+  .route-head{display:flex; align-items:center; gap:12px; padding:16px 22px 10px}
+  .route-num{width:30px; height:30px; border-radius:9px; display:grid; place-items:center; color:#fff; font-weight:700; font-family:'Space Grotesk',sans-serif; font-size:14px}
+  .route-title{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14.5px}
+  .route-steps{display:flex; flex-wrap:wrap; gap:7px; padding:0 22px 18px; align-items:center}
+  .step{background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:6px 11px; font-size:12.5px; color:var(--text)}
+  .step.last{background:var(--ink); color:#fff; border-color:var(--ink); font-weight:600}
+  .chev{color:var(--faint); font-size:14px; font-weight:600}
+  .guide-note{font-size:12.5px; color:var(--muted); line-height:1.7; padding:2px 4px}
+
+  /* Sub-pestañas dentro de la vista de cliente */
+  .subtabs{display:flex; gap:2px; margin:4px 0 18px; border-bottom:1px solid var(--line)}
+  .subtab{all:unset; cursor:pointer; padding:10px 18px; font-family:'Space Grotesk',sans-serif; font-size:13.5px; font-weight:600; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:color .15s, border-color .15s}
+  .subtab:hover{color:var(--text)}
+  .subtab.active{color:var(--text); border-bottom-color:var(--ink)}
+  .subtab:focus-visible{outline:2px solid var(--fact); outline-offset:2px; border-radius:6px}
+
+  .hidden{display:none!important}
+  .fade{animation:fade .35s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .rol{color:var(--fact); font-weight:600; font-size:12px}
+  .brand-updated{font-size:10.5px; color:#7a8aa3; padding-left:20px; margin-top:6px; line-height:1.4}
+
+  /* KPI clicable */
+  .kpi.clickable{cursor:pointer; transition:transform .12s, box-shadow .12s, border-color .12s}
+  .kpi.clickable:hover{transform:translateY(-2px); box-shadow:0 6px 20px rgba(16,28,46,.12); border-color:var(--auto)}
+  .kpi.clickable:focus-visible{outline:2px solid var(--auto); outline-offset:2px}
+  .kpi-go{display:inline-block; margin-top:6px; color:var(--auto); font-weight:600; font-size:11.5px}
+
+  /* Modal */
+  .modal-overlay{position:fixed; inset:0; background:rgba(16,28,46,.5); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; padding:28px; z-index:60; animation:fade .2s ease}
+  .modal-overlay[hidden]{display:none}
+  .modal{background:var(--card); border-radius:16px; box-shadow:0 24px 70px rgba(16,28,46,.35); width:min(960px,100%); max-height:88vh; display:flex; flex-direction:column; overflow:hidden}
+  .modal-head{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 24px 14px; border-bottom:1px solid var(--line)}
+  .modal-title{font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:600}
+  .modal-sub{font-size:12.5px; color:var(--muted); margin-top:3px}
+  .modal-close{all:unset; cursor:pointer; font-size:26px; line-height:1; color:var(--muted); padding:2px 8px; border-radius:8px; transition:.15s}
+  .modal-close:hover{background:var(--paper); color:var(--text)}
+  .modal-tools{padding:12px 24px; border-bottom:1px solid var(--line)}
+  .modal-tools input{width:100%; font-family:'Inter',sans-serif; font-size:13.5px; color:var(--text); background:var(--paper); border:1px solid var(--line-strong); border-radius:10px; padding:9px 13px; outline:none}
+  .modal-tools input:focus{border-color:var(--auto)}
+  .modal-body{overflow:auto; padding:0}
+  .modal-body table{border:none; border-radius:0; box-shadow:none}
+  .modal-body thead th{position:sticky; top:0; z-index:1}
+  .modal-body td.txt{font-family:'Inter',sans-serif; text-align:left; white-space:normal; letter-spacing:0; color:var(--text)}
+  .modal-empty{padding:36px; text-align:center; color:var(--muted); font-size:13.5px}
+  @media(max-width:620px){.modal-overlay{padding:0}.modal{max-height:100vh;border-radius:0;width:100%}}
+</style>
+</head>
+<body>
+  <aside class="rail">
+    <div class="brand">
+      <div class="mark">Tablero Truput</div>
+      <div class="sub">Indicadores por contrato</div>
+      <div class="brand-updated" id="brandUpdated">Sin actualizar</div>
+    </div>
+    <div class="navlabel">Vistas</div>
+    <nav class="nav" id="nav">
+      <button data-c="resumen" class="active"><span class="dot"></span>Resumen</button>
+      <button data-c="quala"><span class="dot"></span>Quala</button>
+      <button data-c="colombina"><span class="dot"></span>Colombina del Cauca</button>
+      <button data-c="noel"><span class="dot"></span>Noel</button>
+      <button data-c="guia" class="navguide"><span class="dot"></span>Guía rápida</button>
+    </nav>
+    <div class="rail-foot">
+      <b>Facturación</b> · Venta total<br>
+      <b>Costo</b> · Costo total<br>
+      <b>Truput</b> · Truput factura<br>
+      <b>Autoconsumo</b> · cruce factura → Debe
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="viewTitle">Resumen consolidado</h1>
+        <div class="ctx" id="viewCtx">Sube los dos archivos para ver los indicadores.</div>
+      </div>
+      <div class="monthbox" id="monthBox" hidden>
+        <label for="monthSel">Mes</label>
+        <select id="monthSel"><option value="all">Todos los meses</option></select>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- Cargadores -->
+      <div class="loaders">
+        <label class="drop" id="dropT">
+          <div class="ic" id="icT">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/></svg>
+          </div>
+          <div class="meta">
+            <div class="t">Reporte Truput</div>
+            <div class="d" id="dT">Arrastra el .xlsx o haz clic para elegirlo</div>
+          </div>
+          <input type="file" id="fileT" accept=".xlsx,.xls">
+        </label>
+
+        <label class="drop" id="dropA">
+          <div class="ic" id="icA">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/></svg>
+          </div>
+          <div class="meta">
+            <div class="t">Apunte Contable</div>
+            <div class="d" id="dA">Arrastra el .xlsx o haz clic para elegirlo</div>
+          </div>
+          <input type="file" id="fileA" accept=".xlsx,.xls">
+        </label>
+
+        <label class="drop" id="dropS">
+          <div class="ic" id="icS">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/></svg>
+          </div>
+          <div class="meta">
+            <div class="t">Traslado</div>
+            <div class="d" id="dS">Arrastra el .xlsx o haz clic para elegirlo</div>
+          </div>
+          <input type="file" id="fileS" accept=".xlsx,.xls">
+        </label>
+      </div>
+      <div class="hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+        <span>Todo se procesa en tu navegador; los archivos no se envían a ningún servidor. Puedes volver a subir un archivo cuando tengas datos nuevos y el tablero se actualiza solo.</span>
+      </div>
+
+      <!-- Vistas -->
+      <div id="views">
+        <div class="empty" id="emptyState">
+          <div class="big">Aún no hay datos cargados</div>
+          Sube el <b>Reporte Truput</b>, el <b>Apunte Contable</b> y el <b>Traslado</b>. Con solo el Truput ya verás Facturación, Costo y Truput; el Autoconsumo aparece al cargar también el Apunte y el Traslado.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="autoModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="autoModalTitle">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="autoModalTitle">Detalle de autoconsumos</div>
+          <div class="modal-sub" id="autoModalSub"></div>
+        </div>
+        <button class="modal-close" id="autoModalClose" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="modal-tools">
+        <input id="autoFilter" type="text" placeholder="Filtrar por contacto, factura, detalle…" autocomplete="off">
+      </div>
+      <div class="modal-body" id="autoModalBody"></div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+
+/* ---------- Configuración de criterios (igual al modelo en Excel) ---------- */
+const CLIENTES = {
+  quala:     { titulo:"Quala",               nombre:"QUALA S A",                     accent:"fact" },
+  colombina: { titulo:"Colombina del Cauca", nombre:"COLOMBINA DEL CAUCA S A",        accent:"tru"  },
+  noel:      { titulo:"Noel",                nombre:"COMPAÑIA DE GALLETAS NOEL SAS",  accent:"auto" },
+};
+const REF = { serv:"SERV IN HOUSE", etiqCat:"ETIQUETAS POR CONTRATO", mant:"CONTRATO DE MANTENIMIENTO", bk:"813520070055BK", print:"PRINTING ALL IN" };
+
+/* Definición del desglose por cliente. Cada renglón: etiqueta + tipo de filtro */
+const BREAKDOWN = {
+  quala: [
+    { label:"Contrato de Etiquetas · SERV IN HOUSE",        by:"ref", val:REF.serv },
+    { label:"Contrato de Etiquetas · ETIQUETAS POR CONTRATO", by:"cat", val:REF.etiqCat },
+    { label:"Contrato de Codificación · MANTENIMIENTO",     by:"ref", val:REF.mant },
+  ],
+  colombina: [
+    { label:"Contrato · 813520070055BK", by:"ref", val:REF.bk },
+  ],
+  noel: [
+    { label:"813520070055BK",  by:"ref", val:REF.bk },
+    { label:"PRINTING ALL IN", by:"ref", val:REF.print },
+  ],
+};
+
+/* ---------- Guía rápida: rutas de descarga de informes ---------- */
+const GUIA_RUTAS = [
+  { n:1, titulo:"Reporte Truput", color:"var(--fact)",
+    pasos:["Odoo","Truput","Filtro por año 2026"] },
+  { n:2, titulo:"Apunte Contable", color:"var(--auto)",
+    pasos:["Odoo","Contabilidad","Contabilidad","Apuntes contables","Filtro cuenta 6","Filtro fecha 2026","Filtro apunte contable «Autoc»","Selecciono todo","Exporto «Libros IVA E ICA V18 2026»"] },
+  { n:3, titulo:"Traslado", color:"var(--cost)",
+    pasos:["Odoo","Inventario","Autoconsumo Clientes","Filtro Fecha de Creación: 1-01-2026 a la fecha actual","Aplicar","Descargo"] },
+];
+
+/* ---------- Personal asignado por contrato (datos fijos) ---------- */
+const FACTOR_SUELDO = 1.53;
+const PERSONAL = {
+  quala: [
+    { sede:"Quala Venecia",   nombre:"Alexandra Campo", base:2160538 },
+    { sede:"Quala Venecia",   nombre:"Adriana Reyes",   base:1940778 },
+    { sede:"Quala Venecia",   nombre:"Edwin Duque",     base:1838450 },
+    { sede:"Quala Venecia",   nombre:"Esteban Peña",    base:3343269, rol:"Técnicos" },
+    { sede:"Quala Venecia",   nombre:"Marcela Merlano", base:2693578, rol:"Técnicos" },
+    { sede:"Quala Venecia",   nombre:"Jose Cano",       base:2693578, rol:"Técnicos" },
+    { sede:"Quala Tocancipá", nombre:"Judy Sastre",     base:1919280 },
+    { sede:"Quala Tocancipá", nombre:"Yair Preciado",   base:1855980 },
+  ],
+  colombina: [
+    { sede:"Colombina del Cauca", nombre:"Jairo Adolfo Diosa", base:3500000 },
+  ],
+};
+
+/* ---------- Utilidades ---------- */
+const fold = s => String(s==null?"":s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim().toLowerCase();
+const COP = new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+const money = n => COP.format(Math.round(n||0));
+const pct = n => (n*100).toLocaleString("es-CO",{minimumFractionDigits:1,maximumFractionDigits:1})+" %";
+function toNum(x){
+  if(typeof x==="number") return isFinite(x)?x:0;
+  if(x==null) return 0;
+  let s=String(x).replace(/\s/g,"").replace(/[^\d,.\-]/g,"");
+  if(s.indexOf(",")>-1 && s.indexOf(".")>-1){ s=s.replace(/\./g,"").replace(",","."); }
+  else if(s.indexOf(",")>-1){ s=s.replace(",","."); }
+  const v=parseFloat(s); return isFinite(v)?v:0;
+}
+const MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+/* Devuelve clave de mes "YYYY-MM" desde Date, serial de Excel o texto */
+function monthKey(v){
+  if(v==null||v==="") return null;
+  let d=null;
+  if(v instanceof Date){ d=v; }
+  else if(typeof v==="number"){ d=new Date(Math.round((v-25569)*86400000)); }
+  else { const t=Date.parse(v); if(!isNaN(t)) d=new Date(t); }
+  if(!d||isNaN(d.getTime())) return null;
+  return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0");
+}
+function monthLabel(ym){
+  if(ym==="all") return "Todos los meses";
+  const [y,m]=ym.split("-");
+  const nm=MESES[parseInt(m,10)-1]||m;
+  return nm.charAt(0).toUpperCase()+nm.slice(1)+" "+y;
+}
+/* Extrae el número de factura (ej. "FVO100610 (OC ...)" -> "FVO100610") */
+function invToken(s){
+  if(s==null||s==="") return null;
+  const str=String(s);
+  const m=str.match(/FVO\s*\d+/i);
+  if(m) return m[0].replace(/\s+/g,"").toUpperCase();
+  const t=str.split("(")[0].trim().toUpperCase();
+  return t||null;
+}
+/* Extrae el código de autoconsumo (ej. "BOD1/AUTOC/21288 - ...") */
+function autocCode(s){
+  if(s==null||s==="") return null;
+  const m=String(s).match(/[A-Z0-9]+\/AUTOC\/\d+/i);
+  return m?m[0].toUpperCase():null;
+}
+/* Formatea una fecha (Date, serial Excel o texto) a DD/MM/AAAA */
+function fmtDate(v){
+  if(v==null||v==="") return "";
+  let d=null;
+  if(v instanceof Date) d=v;
+  else if(typeof v==="number") d=new Date(Math.round((v-25569)*86400000));
+  else { const t=Date.parse(v); if(!isNaN(t)) d=new Date(t); }
+  if(!d||isNaN(d.getTime())) return String(v);
+  const dd=String(d.getUTCDate()).padStart(2,"0"), mm=String(d.getUTCMonth()+1).padStart(2,"0");
+  return dd+"/"+mm+"/"+d.getUTCFullYear();
+}
+/* Quita el prefijo "BOD1/AUTOC/#### - " de la etiqueta y deja lo que sigue */
+function cleanEtiqueta(s){
+  if(s==null||s==="") return "";
+  let str=String(s).replace(/^[A-Z0-9]+\/AUTOC\/\d+\s*-\s*/i,"");
+  return str.replace(/\s*\n\s*/g," · ").trim();
+}
+
+/* ---------- Estado ---------- */
+const state = { truput:null, apunte:null, traslado:null, results:null, view:"resumen", month:"all", clientTab:"detalle" };
+
+/* ---------- Lectura de Excel ---------- */
+function readWorkbook(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        const wb=XLSX.read(e.target.result,{type:"array"});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:false});
+        res(aoa);
+      }catch(err){ rej(err); }
+    };
+    r.onerror=()=>rej(new Error("No se pudo leer el archivo"));
+    r.readAsArrayBuffer(file);
+  });
+}
+function colIndex(headers, matcher){
+  for(let i=0;i<headers.length;i++){ if(matcher(fold(headers[i]))) return i; }
+  return -1;
+}
+
+/* Parsea Truput -> {rows:[{cli,ref,cat,fact,tru}], n} o lanza error */
+function parseTruput(aoa){
+  if(!aoa||aoa.length<2) throw new Error("vacío");
+  const h=aoa[0];
+  const cCli=colIndex(h,x=>x==="nombre del cliente");
+  const cRef=colIndex(h,x=>x==="referencia interna del producto");
+  const cCat=colIndex(h,x=>x==="categoria del producto");
+  const cFac=colIndex(h,x=>x==="venta total");
+  const cCos=colIndex(h,x=>x==="costo total");
+  const cTru=colIndex(h,x=>x==="truput factura");
+  const cFec=colIndex(h,x=>x==="fecha factura");
+  const cInv=colIndex(h,x=>x==="factura de venta");
+  const missing=[]; 
+  if(cCli<0)missing.push("Nombre del cliente"); if(cRef<0)missing.push("Referencia interna del producto");
+  if(cCat<0)missing.push("Categoría del producto"); if(cFac<0)missing.push("Venta total"); if(cTru<0)missing.push("Truput factura");
+  if(missing.length) { const e=new Error("cols"); e.missing=missing; throw e; }
+  const rows=[];
+  for(let i=1;i<aoa.length;i++){
+    const r=aoa[i]; if(!r) continue;
+    const cli=r[cCli]; if(cli==null||String(cli).trim()==="") continue;
+    rows.push({ cli:fold(cli), ref:fold(r[cRef]), cat:fold(r[cCat]),
+      fact:toNum(r[cFac]), cost:cCos<0?0:toNum(r[cCos]), tru:toNum(r[cTru]),
+      ym: cFec<0?null:monthKey(r[cFec]), invdate: cFec<0?"":fmtDate(r[cFec]), inv: cInv<0?null:invToken(r[cInv]) });
+  }
+  return {rows, n:rows.length};
+}
+/* Parsea Apunte -> {rows:[{cli,debe}], n} */
+function parseApunte(aoa){
+  if(!aoa||aoa.length<2) throw new Error("vacío");
+  const h=aoa[0];
+  const cCli=colIndex(h,x=>x==="asociado");
+  const cDeb=colIndex(h,x=>x==="debe");
+  const cRefn=colIndex(h,x=>x==="referencia");
+  const cAsi=colIndex(h,x=>x==="asiento contable");
+  const cEtq=colIndex(h,x=>x==="etiqueta");
+  const cFch=colIndex(h,x=>x==="fecha");
+  const missing=[];
+  if(cDeb<0)missing.push("Debe");
+  if(cRefn<0 && cAsi<0 && cEtq<0)missing.push("Referencia / Asiento contable");
+  if(missing.length){ const e=new Error("cols"); e.missing=missing; throw e; }
+  const rows=[];
+  for(let i=1;i<aoa.length;i++){
+    const r=aoa[i]; if(!r) continue;
+    const code = (cRefn>=0?autocCode(r[cRefn]):null) || (cAsi>=0?autocCode(r[cAsi]):null) || (cEtq>=0?autocCode(r[cEtq]):null);
+    if(!code) continue;
+    rows.push({ autoc:code, debe:toNum(r[cDeb]),
+      fecha: cFch<0?"":fmtDate(r[cFch]),
+      etiqueta: cleanEtiqueta(cEtq>=0?r[cEtq]:(cRefn>=0?r[cRefn]:"")) });
+  }
+  return {rows, n:rows.length};
+}
+/* Traslado: mapa código AUTOC -> número de factura */
+function parseTraslado(aoa){
+  if(!aoa||aoa.length<2) throw new Error("vacío");
+  const h=aoa[0];
+  const cRefn=colIndex(h,x=>x==="referencia");
+  const cFac=colIndex(h,x=>x==="factura");
+  const cCon=colIndex(h,x=>x==="contacto");
+  const missing=[];
+  if(cRefn<0)missing.push("Referencia"); if(cFac<0)missing.push("Factura");
+  if(missing.length){ const e=new Error("cols"); e.missing=missing; throw e; }
+  const map={}; let pairs=0;
+  for(let i=1;i<aoa.length;i++){
+    const r=aoa[i]; if(!r) continue;
+    const code=autocCode(r[cRefn]); const inv=invToken(r[cFac]);
+    if(code && inv && !(code in map)){
+      map[code]={ inv,
+        contacto: cCon<0?"":(r[cCon]==null?"":String(r[cCon])),
+        ref: r[cRefn]==null?"":String(r[cRefn]),
+        fac: r[cFac]==null?"":String(r[cFac]) };
+      pairs++;
+    }
+  }
+  return {map, n:pairs};
+}
+
+/* ---------- Cálculo ---------- */
+function availableMonths(){
+  const set=new Set();
+  if(state.truput) state.truput.rows.forEach(r=>{ if(r.ym) set.add(r.ym); });
+  return Array.from(set).sort();
+}
+function compute(){
+  if(!state.truput) return null;
+  const mes=state.month;
+  const inMonth = r => mes==="all" || r.ym===mes;
+  const autoReady = !!(state.apunte && state.traslado);
+  const tmap = state.traslado ? state.traslado.map : {};
+  /* Mapa factura -> fecha de factura (Reporte Truput, columna B) */
+  const invDate={};
+  state.truput.rows.forEach(r=>{ if(r.inv && r.invdate && !(r.inv in invDate)) invDate[r.inv]=r.invdate; });
+  const out={};
+  for(const key of Object.keys(CLIENTES)){
+    const cfg=CLIENTES[key];
+    const cliF=fold(cfg.nombre);
+    const tr=state.truput.rows.filter(r=>r.cli===cliF && inMonth(r));
+    const lines=BREAKDOWN[key].map(b=>{
+      const sel=tr.filter(r=> b.by==="ref" ? r.ref===fold(b.val) : r.cat===fold(b.val));
+      return { label:b.label, fact:sel.reduce((a,r)=>a+r.fact,0), cost:sel.reduce((a,r)=>a+r.cost,0),
+        tru:sel.reduce((a,r)=>a+r.tru,0), count:sel.length };
+    });
+    const fact=lines.reduce((a,l)=>a+l.fact,0);
+    const cost=lines.reduce((a,l)=>a+l.cost,0);
+    const tru =lines.reduce((a,l)=>a+l.tru,0);
+
+    /* Autoconsumo: facturas del mes (de este cliente) -> cruce vía Traslado -> Apunte */
+    let auto=0, autoN=0; const detail=[];
+    if(autoReady){
+      const facturas=new Set(); tr.forEach(r=>{ if(r.inv) facturas.add(r.inv); });
+      for(const l of state.apunte.rows){
+        const t=tmap[l.autoc];
+        if(t && facturas.has(t.inv)){
+          auto+=l.debe; autoN++;
+          detail.push({ cliente:cfg.titulo, contacto:t.contacto, referencia:t.ref, factura:t.fac,
+            fechaFactura: invDate[t.inv]||"", fecha:l.fecha, etiqueta:l.etiqueta, debe:l.debe });
+        }
+      }
+    }
+    out[key]={ titulo:cfg.titulo, accent:cfg.accent, lines, fact, cost, tru, auto, autoN, autoReady, detail, margen: fact?tru/fact:0 };
+  }
+  return out;
+}
+
+/* ---------- Render ---------- */
+const ACC={fact:"var(--fact)",tru:"var(--tru)",auto:"var(--auto)"};
+const ACCKEY={quala:"fact",colombina:"tru",noel:"auto"};
+const views=document.getElementById("views");
+const empty=document.getElementById("emptyState");
+
+function kpiCard(cls,label,value,note,click){
+  const clickable = click ? ` clickable" onclick="${click}` : "";
+  const hint = click ? `<span class="kpi-go">Ver detalle ›</span>` : "";
+  return `<div class="kpi ${cls}${clickable}"><div class="lab"><span class="tag"></span>${label}</div>
+    <div class="val">${value}</div><div class="note">${note||""}${hint}</div></div>`;
+}
+function signCell(n){
+  const c = n<0 ? "neg" : (n>0?"pos":"");
+  return `<td class="${c}">${money(n)}</td>`;
+}
+
+function detalleSection(key,d){
+  let rows="";
+  d.lines.forEach(l=>{
+    rows+=`<tr><td>${l.label}</td>${signCell(l.fact)}${signCell(l.cost)}${signCell(l.tru)}
+      <td class="muted-cell">${l.count} ${l.count===1?"línea":"líneas"}</td>
+      <td>${l.fact?pct(l.tru/l.fact):"—"}</td></tr>`;
+  });
+  rows+=`<tr class="total"><td>Total contrato</td>${signCell(d.fact)}${signCell(d.cost)}${signCell(d.tru)}
+      <td class="muted-cell">${d.autoReady?(d.autoN+" autoc."):"—"}</td><td>${d.fact?pct(d.margen):"—"}</td></tr>`;
+  return `<div class="sec-h"><h2>Detalle por contrato / referencia</h2>
+      <span class="meta">Tomado del Reporte Truput</span></div>
+    <div class="tscroll"><table><thead><tr><th>Concepto</th><th>Facturación</th><th>Costo</th><th>Truput</th><th>Líneas</th><th>Margen %</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    ${critPanel(key)}`;
+}
+function personalSection(key){
+  const ppl=PERSONAL[key]||[];
+  let body="", tb=0, tt=0;
+  ppl.forEach(p=>{
+    const total=p.base*FACTOR_SUELDO; tb+=p.base; tt+=total;
+    const nombre = p.rol ? `${p.nombre} <span class="rol">(${p.rol})</span>` : p.nombre;
+    body+=`<tr><td class="txt">${p.sede}</td><td class="txt">${nombre}</td>${signCell(p.base)}<td>× 1,53</td>${signCell(total)}</tr>`;
+  });
+  body+=`<tr class="total"><td class="txt" colspan="2">Total (${ppl.length})</td>${signCell(tb)}<td>—</td>${signCell(tt)}</tr>`;
+  return `<div class="sec-h"><h2>Personal Asignado</h2>
+      <span class="meta">Sueldo total = sueldo base × 1,53</span></div>
+    <div class="tscroll"><table><thead><tr><th>Sede</th><th>Nombre</th><th>Sueldo Base</th><th>Factor</th><th>Sueldo Total</th></tr></thead>
+      <tbody>${body}</tbody></table></div>`;
+}
+function renderClient(key){
+  const d=state.results[key]; if(!d) return "";
+  const hasPersonal = !!PERSONAL[key];
+  const tab = hasPersonal ? (state.clientTab||"detalle") : "detalle";
+  const subtabs = hasPersonal ? `<div class="subtabs">
+      <button class="subtab ${tab==='detalle'?'active':''}" onclick="showClientTab('detalle')">Detalle del contrato</button>
+      <button class="subtab ${tab==='personal'?'active':''}" onclick="showClientTab('personal')">Personal Asignado</button>
+    </div>` : "";
+  const section = (hasPersonal && tab==='personal') ? personalSection(key) : detalleSection(key,d);
+
+  return `<div class="fade">
+    <div class="kpis">
+      ${kpiCard("fact","Valor Facturación",money(d.fact),"Suma de Venta total")}
+      ${kpiCard("cost","Costo",money(d.cost),"Suma de Costo total")}
+      ${kpiCard("tru","Truput",money(d.tru),"Margen "+(d.fact?pct(d.margen):"—"))}
+      ${kpiCard("auto","Valor Autoconsumo<span class='sub'>(Ya incluido en el costo total)</span>", d.autoReady?money(d.auto):"—", d.autoReady?(d.autoN+" autoconsumos cruzados"):"Carga Apunte y Traslado", (d.autoReady&&d.autoN>0)?`openAutoDetail('${key}')`:"")}
+    </div>
+    ${subtabs}
+    ${section}
+  </div>`;
+}
+
+function critPanel(key){
+  const items={
+    quala:`Se toma de <code>QUALA S A</code>: referencia <code>SERV IN HOUSE</code> y categoría <code>ETIQUETAS POR CONTRATO</code> (Contrato de Etiquetas), más la referencia <code>CONTRATO DE MANTENIMIENTO</code> (Contrato de Codificación).`,
+    colombina:`Se toma de <code>COLOMBINA DEL CAUCA S A</code> únicamente la referencia <code>813520070055BK</code>.`,
+    noel:`Se toma de <code>COMPAÑIA DE GALLETAS NOEL SAS</code> las referencias <code>813520070055BK</code> y <code>PRINTING ALL IN</code>.`,
+  };
+  return `<details class="crit"><summary><span class="chev">▶</span>Criterios de cálculo</summary>
+    <div class="body">${items[key]}<br><br>
+    <b>Autoconsumo (cruce por factura):</b> se toman las facturas del mes de este cliente en el Reporte Truput; en el archivo <b>Traslado</b> esas facturas (columna <code>Factura</code>) se enlazan con su código de autoconsumo (columna <code>Referencia</code>, ej. <code>BOD1/AUTOC/####</code>); y en el <b>Apunte Contable</b> se suman los valores de la columna <code>Debe</code> de esos códigos.<br><br>
+    Facturación = <code>Venta total</code> · Truput = <code>Truput factura</code> · Costo = <code>Costo total</code> del Reporte Truput.</div></details>`;
+}
+
+function renderResumen(){
+  const ks=["quala","colombina","noel"];
+  const R=state.results;
+  const ready=R.quala.autoReady;
+  const T={fact:0,cost:0,tru:0,auto:0};
+  ks.forEach(k=>{T.fact+=R[k].fact;T.cost+=R[k].cost;T.tru+=R[k].tru;T.auto+=R[k].auto;});
+
+  let rows="";
+  ks.forEach(k=>{
+    const d=R[k]; const acc=ACC[ACCKEY[k]];
+    rows+=`<tr>
+      <td><div class="cName"><span class="sw" style="background:${acc}"></span>${d.titulo}</div></td>
+      ${signCell(d.fact)}${signCell(d.cost)}${signCell(d.tru)}${ready?signCell(d.auto):'<td class="muted-cell">—</td>'}
+      <td>${d.fact?pct(d.margen):"—"}</td></tr>`;
+  });
+  rows+=`<tr class="total"><td>Total general</td>${signCell(T.fact)}${signCell(T.cost)}${signCell(T.tru)}${ready?signCell(T.auto):'<td class="muted-cell">—</td>'}
+      <td>${T.fact?pct(T.tru/T.fact):"—"}</td></tr>`;
+
+  const periodo = state.month==="all" ? "3 contratos" : monthLabel(state.month);
+  return `<div class="fade">
+    <div class="kpis">
+      ${kpiCard("fact","Facturación total",money(T.fact),periodo)}
+      ${kpiCard("cost","Costo total",money(T.cost),"Suma de Costo total")}
+      ${kpiCard("tru","Truput total",money(T.tru),"Margen "+(T.fact?pct(T.tru/T.fact):"—"))}
+      ${kpiCard("auto","Autoconsumo total<span class='sub'>(Ya incluido en el costo total)</span>", ready?money(T.auto):"—", ready?"Cruce por factura del mes":"Carga Apunte y Traslado", (ready&&T.auto!==0)?"openAutoDetail('all')":"")}
+    </div>
+    <div class="sec-h"><h2>Indicadores por cliente</h2>
+      <span class="meta">Truput · Apunte · Traslado</span></div>
+    <div class="tscroll"><table><thead><tr><th>Cliente</th><th>Facturación</th><th>Costo</th><th>Truput</th><th style="white-space:normal;min-width:130px">Autoconsumo <span style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--auto)">(Ya incluido en el costo total)</span></th><th>Margen %</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
+const TITLES={
+  resumen:["Resumen consolidado","Los tres contratos en una sola vista"],
+  quala:["Quala","Contrato de Etiquetas y Codificación"],
+  colombina:["Colombina del Cauca","Contrato 813520070055BK"],
+  noel:["Noel","Contratos 813520070055BK y Printing All In"],
+  guia:["Guía rápida","Cómo usar el tablero y de dónde descargar los informes"],
+};
+function renderGuia(){
+  const uso=[
+    "Descarga los tres informes desde Odoo siguiendo las rutas de abajo.",
+    "Súbelos en los cargadores de la parte superior: Reporte Truput, Apunte Contable y Traslado.",
+    "Con solo el Truput ya ves Facturación, Costo y Truput; el Autoconsumo aparece al cargar también el Apunte y el Traslado.",
+    "Usa el filtro de Mes (arriba a la derecha) para ver un período específico.",
+    "La tarjeta de Autoconsumo es clicable: abre el detalle del cruce por factura.",
+    "En Quala y Colombina, la pestaña «Personal Asignado» muestra el personal y los sueldos.",
+  ];
+  let usoHtml=uso.map((t,i)=>`<li><span class="ol-n">${i+1}</span><span>${t}</span></li>`).join("");
+
+  let rutas=GUIA_RUTAS.map(r=>{
+    const steps=r.pasos.map((p,i)=>{
+      const last=i===r.pasos.length-1;
+      return `<span class="step${last?" last":""}">${p}</span>`+(last?"":`<span class="chev">›</span>`);
+    }).join("");
+    return `<div class="route">
+      <div class="route-head">
+        <span class="route-num" style="background:${r.color}">${r.n}</span>
+        <span class="route-title">${r.titulo}</span>
+      </div>
+      <div class="route-steps">${steps}</div>
+    </div>`;
+  }).join("");
+
+  return `<div class="fade guide">
+    <div class="guide-card">
+      <div class="guide-h"><h3>Cómo usar el tablero</h3></div>
+      <ol class="guide-ol">${usoHtml}</ol>
+    </div>
+    <div class="guide-card">
+      <div class="guide-h"><h3>Ruta para descargar los informes</h3>
+        <span class="guide-sub">En Odoo, sigue cada ruta y descarga el archivo correspondiente.</span></div>
+      <div class="routes">${rutas}</div>
+    </div>
+    <div class="guide-note">Indicadores: <b>Facturación</b> = Venta total · <b>Costo</b> = Costo total · <b>Truput</b> = Truput factura (Reporte Truput). <b>Autoconsumo</b> = cruce de la factura del mes (Truput → Traslado) y suma de la columna Debe del Apunte Contable. <b>Sueldo total</b> = sueldo base × 1,53.</div>
+  </div>`;
+}
+function render(){
+  document.getElementById("viewTitle").textContent=TITLES[state.view][0];
+  if(state.view==="guia"){
+    document.getElementById("viewCtx").textContent=TITLES.guia[1];
+    views.innerHTML=renderGuia();
+    return;
+  }
+  if(!state.results){
+    document.getElementById("viewCtx").textContent="Sube los archivos para ver los indicadores.";
+    views.innerHTML=""; views.appendChild(empty); empty.classList.remove("hidden");
+    return;
+  }
+  document.getElementById("viewCtx").textContent=TITLES[state.view][1] + (state.month==="all" ? "" : " · "+monthLabel(state.month));
+  views.innerHTML = state.view==="resumen" ? renderResumen() : renderClient(state.view);
+}
+
+/* ---------- Carga de archivos ---------- */
+const DZ={t:{d:"dT",drop:"dropT",input:"fileT"},a:{d:"dA",drop:"dropA",input:"fileA"},s:{d:"dS",drop:"dropS",input:"fileS"}};
+function setStatus(which, ok, msg){
+  const d=document.getElementById(DZ[which].d);
+  const drop=document.getElementById(DZ[which].drop);
+  d.textContent=msg; d.classList.toggle("err",!ok);
+  drop.classList.toggle("ready",ok);
+}
+async function handleFile(which, file){
+  if(!file) return;
+  try{
+    const aoa=await readWorkbook(file);
+    if(which==="t"){
+      const p=parseTruput(aoa); state.truput=p;
+      setStatus("t",true,`${file.name} · ${p.n.toLocaleString("es-CO")} filas`);
+    }else if(which==="a"){
+      const p=parseApunte(aoa); state.apunte=p;
+      setStatus("a",true,`${file.name} · ${p.n.toLocaleString("es-CO")} autoconsumos`);
+    }else{
+      const p=parseTraslado(aoa); state.traslado=p;
+      setStatus("s",true,`${file.name} · ${p.n.toLocaleString("es-CO")} facturas enlazadas`);
+    }
+    state.results=compute();
+    if(state.results){ refreshMonths(); render(); setUpdated(); toast("Tablero actualizado"); }
+  }catch(err){
+    if(err && err.missing){
+      setStatus(which,false,"Faltan columnas: "+err.missing.join(", "));
+      toast("Ese archivo no parece el correcto. ¿Lo intercambiaste?");
+    }else{
+      setStatus(which,false,"No se pudo leer el archivo");
+    }
+  }
+}
+
+/* ---------- Filtro de mes ---------- */
+function refreshMonths(){
+  const box=document.getElementById("monthBox");
+  const sel=document.getElementById("monthSel");
+  const months=availableMonths();
+  if(!months.length){ box.hidden=true; return; }
+  box.hidden=false;
+  if(!months.includes(state.month)) state.month="all";
+  sel.innerHTML='<option value="all">Todos los meses</option>'+
+    months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join("");
+  sel.value=state.month;
+}
+document.getElementById("monthSel").addEventListener("change",e=>{
+  state.month=e.target.value;
+  state.results=compute();
+  render();
+});
+
+function wireDrop(which){
+  const drop=document.getElementById(DZ[which].drop);
+  const input=document.getElementById(DZ[which].input);
+  input.addEventListener("change",e=>handleFile(which,e.target.files[0]));
+  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("drag");}));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("drag");}));
+  drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(which,f); });
+}
+wireDrop("t"); wireDrop("a"); wireDrop("s");
+
+/* ---------- Navegación ---------- */
+document.getElementById("nav").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#nav button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");
+  state.view=b.dataset.c; state.clientTab="detalle"; render();
+});
+window.showClientTab=function(t){ state.clientTab=t; render(); };
+
+/* ---------- Toast ---------- */
+let toastT;
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+/* ---------- Detalle de autoconsumos (modal) ---------- */
+let autoRows=[], autoShowCliente=false;
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function autoTable(rows){
+  if(!rows.length) return `<div class="modal-empty">No hay autoconsumos para mostrar.</div>`;
+  const cliCol = autoShowCliente;
+  let body="";
+  rows.forEach(r=>{
+    body+=`<tr>${cliCol?`<td class="txt">${esc(r.cliente)}</td>`:""}<td class="txt">${esc(r.contacto)}</td>`+
+      `<td class="txt">${esc(r.referencia)}</td><td class="txt">${esc(r.factura)}</td>`+
+      `<td>${esc(r.fechaFactura)}</td><td>${esc(r.fecha)}</td><td class="txt">${esc(r.etiqueta)}</td>${signCell(r.debe)}</tr>`;
+  });
+  const tot=rows.reduce((a,r)=>a+r.debe,0);
+  body+=`<tr class="total"><td class="txt" colspan="${cliCol?7:6}">Total (${rows.length})</td>${signCell(tot)}</tr>`;
+  return `<table><thead><tr>${cliCol?"<th>Cliente</th>":""}<th>Contacto</th><th>Referencia</th><th>Factura</th><th>Fecha Factura</th><th>Fecha Autoconsumo</th><th>Etiqueta</th><th>Debe</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function renderAutoBody(q){
+  q=(q||"").trim().toLowerCase();
+  const rows = q? autoRows.filter(r=>(r.contacto+" "+r.referencia+" "+r.factura+" "+r.etiqueta+" "+r.cliente).toLowerCase().includes(q)) : autoRows;
+  document.getElementById("autoModalBody").innerHTML=autoTable(rows);
+}
+window.openAutoDetail=function(which){
+  if(!state.results) return;
+  if(which==="all"){
+    autoRows=["quala","colombina","noel"].flatMap(k=>state.results[k].detail||[]);
+    autoShowCliente=true;
+    document.getElementById("autoModalTitle").textContent="Detalle de autoconsumos · Todos los clientes";
+  }else{
+    const d=state.results[which]; autoRows=d.detail||[]; autoShowCliente=false;
+    document.getElementById("autoModalTitle").textContent="Detalle de autoconsumos · "+d.titulo;
+  }
+  const periodo = state.month==="all" ? "Todos los meses" : monthLabel(state.month);
+  const tot=autoRows.reduce((a,r)=>a+r.debe,0);
+  document.getElementById("autoModalSub").textContent=`${periodo} · ${autoRows.length} líneas · ${money(tot)}`;
+  document.getElementById("autoFilter").value="";
+  renderAutoBody("");
+  document.getElementById("autoModal").hidden=false;
+};
+function closeAutoModal(){ document.getElementById("autoModal").hidden=true; }
+document.getElementById("autoModalClose").addEventListener("click",closeAutoModal);
+document.getElementById("autoModal").addEventListener("click",e=>{ if(e.target.id==="autoModal") closeAutoModal(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeAutoModal(); });
+document.getElementById("autoFilter").addEventListener("input",e=>renderAutoBody(e.target.value));
+
+/* ---------- Última actualización ---------- */
+function setUpdated(d){
+  d = d || new Date();
+  const txt = d.toLocaleString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+  document.getElementById("brandUpdated").textContent = "Actualizado: "+txt;
+}
+
+render();
+</script>
+</body>
+</html>
