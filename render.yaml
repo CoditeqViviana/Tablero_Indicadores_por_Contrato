@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: tablero-indicadores
+    runtime: static
+    buildCommand: "echo sin build"
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
