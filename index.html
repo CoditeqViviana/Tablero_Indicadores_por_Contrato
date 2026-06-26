@@ -118,9 +118,10 @@
 
   .hint{font-size:12.5px; color:var(--muted); margin:14px 2px 26px; display:flex; gap:8px; align-items:flex-start}
   .hint svg{width:15px;height:15px;flex:0 0 15px;margin-top:1px;color:var(--faint)}
-  .linkbtn{all:unset; cursor:pointer; color:var(--auto); font-weight:600; font-size:12.5px; white-space:nowrap; margin-left:auto}
+  .linkbtn{all:unset; cursor:pointer; color:var(--auto); font-weight:600; font-size:12.5px; white-space:nowrap}
   .linkbtn:hover{text-decoration:underline}
   .linkbtn:focus-visible{outline:2px solid var(--auto); outline-offset:2px; border-radius:4px}
+  .hint-actions{margin-left:auto; display:flex; gap:16px; flex-wrap:wrap}
 
   /* ---------- Empty state ---------- */
   .empty{
@@ -322,7 +323,10 @@
       <div class="hint">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
         <span>Todo se procesa en tu navegador y queda guardado: al reabrir el tablero verás los últimos datos cargados, sin volver a subir los archivos. Para actualizar, sube de nuevo el archivo correspondiente.</span>
-        <button id="clearData" class="linkbtn" type="button">Borrar datos guardados</button>
+        <span class="hint-actions">
+          <button id="exportData" class="linkbtn" type="button">Descargar tablero con datos</button>
+          <button id="clearData" class="linkbtn" type="button">Borrar datos guardados</button>
+        </span>
       </div>
 
       <!-- Vistas -->
@@ -951,11 +955,8 @@ function saveData(){
     toast("No se pudieron guardar los datos (demasiado grandes para el navegador)");
   }
 }
-function loadData(){
-  let raw=null;
-  try{ raw=localStorage.getItem(LS_DATA); }catch(e){}
-  if(!raw) return;
-  let d; try{ d=JSON.parse(raw); }catch(e){ return; }
+function applyData(d){
+  if(!d) return;
   if(d.truput) state.truput=d.truput;
   if(d.apunte) state.apunte=d.apunte;
   if(d.traslado) state.traslado=d.traslado;
@@ -964,8 +965,39 @@ function loadData(){
   if(state.truput && state.status.t) setStatus("t",true,state.status.t);
   if(state.apunte && state.status.a) setStatus("a",true,state.status.a);
   if(state.traslado && state.status.s) setStatus("s",true,state.status.s);
+  if(d.updated){ const dt=new Date(d.updated); if(!isNaN(dt.getTime())) showUpdated(dt); }
   state.results=compute();
   if(state.results){ refreshMonths(); }
+}
+function loadData(){
+  let raw=null;
+  try{ raw=localStorage.getItem(LS_DATA); }catch(e){}
+  if(!raw) return;
+  try{ applyData(JSON.parse(raw)); }catch(e){}
+}
+/* Descarga una copia del tablero con los datos incrustados (para compartir/centro de mando) */
+async function exportConDatos(){
+  if(!state.truput){ toast("Primero carga los archivos"); return; }
+  let html;
+  try{
+    const resp=await fetch(location.href,{cache:"no-store"});
+    html=await resp.text();
+  }catch(e){
+    html="<!DOCTYPE html>\n"+document.documentElement.outerHTML;
+  }
+  const payload={ v:1, truput:state.truput, apunte:state.apunte, traslado:state.traslado,
+    month:state.month, status:state.status, updated:new Date().toISOString() };
+  const json=JSON.stringify(payload).replace(/<\/script>/gi,"<\\/script>");
+  const inject="<script>window.EMBEDDED_DATA="+json+";<\/script>";
+  if(/<\/head>/i.test(html)) html=html.replace(/<\/head>/i, inject+"\n</head>");
+  else html=inject+"\n"+html;
+  const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="index.html";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast("Descargado: index.html con los datos incluidos");
 }
 function clearData(){
   if(!confirm("¿Borrar los datos guardados del tablero? Tendrás que volver a subir los archivos.")) return;
@@ -982,9 +1014,10 @@ function clearData(){
   toast("Datos borrados");
 }
 document.getElementById("clearData").addEventListener("click",clearData);
+document.getElementById("exportData").addEventListener("click",exportConDatos);
 
 loadUpdated();
-loadData();
+if(window.EMBEDDED_DATA){ applyData(window.EMBEDDED_DATA); } else { loadData(); }
 render();
 </script>
 </body>
