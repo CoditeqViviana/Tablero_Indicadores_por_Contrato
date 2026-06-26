@@ -63,5 +63,6 @@ Render sirve el tablero como **Static Site** (sitio estático).
 ## Notas
 
 - El tablero usa internet para cargar la librería de lectura de Excel (SheetJS) y las tipografías. Quien lo abra necesita conexión.
-- No requiere base de datos ni backend: cada persona que abre el enlace sube sus propios archivos y ve los resultados en su navegador.
+- No requiere base de datos ni backend. Los archivos que subes quedan guardados en el navegador de cada persona (almacenamiento local), así que al reabrir el enlace se ven los últimos datos cargados sin volver a subirlos. Ese guardado es por navegador y por dispositivo (no se comparte entre usuarios). Hay un botón **Borrar datos guardados** junto a los cargadores.
+- También se guarda la **fecha y hora de la última actualización**, visible bajo el subtítulo del menú.
 - Los datos de **Personal Asignado** y la guía están dentro del propio `index.html`; para cambiarlos se edita ese archivo.
