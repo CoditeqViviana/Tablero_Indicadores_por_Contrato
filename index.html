@@ -118,6 +118,9 @@
 
   .hint{font-size:12.5px; color:var(--muted); margin:14px 2px 26px; display:flex; gap:8px; align-items:flex-start}
   .hint svg{width:15px;height:15px;flex:0 0 15px;margin-top:1px;color:var(--faint)}
+  .linkbtn{all:unset; cursor:pointer; color:var(--auto); font-weight:600; font-size:12.5px; white-space:nowrap; margin-left:auto}
+  .linkbtn:hover{text-decoration:underline}
+  .linkbtn:focus-visible{outline:2px solid var(--auto); outline-offset:2px; border-radius:4px}
 
   /* ---------- Empty state ---------- */
   .empty{
@@ -318,7 +321,8 @@
       </div>
       <div class="hint">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
-        <span>Todo se procesa en tu navegador; los archivos no se envían a ningún servidor. Puedes volver a subir un archivo cuando tengas datos nuevos y el tablero se actualiza solo.</span>
+        <span>Todo se procesa en tu navegador y queda guardado: al reabrir el tablero verás los últimos datos cargados, sin volver a subir los archivos. Para actualizar, sube de nuevo el archivo correspondiente.</span>
+        <button id="clearData" class="linkbtn" type="button">Borrar datos guardados</button>
       </div>
 
       <!-- Vistas -->
@@ -468,7 +472,7 @@ function cleanEtiqueta(s){
 }
 
 /* ---------- Estado ---------- */
-const state = { truput:null, apunte:null, traslado:null, results:null, view:"resumen", month:"all", clientTab:"detalle" };
+const state = { truput:null, apunte:null, traslado:null, results:null, view:"resumen", month:"all", clientTab:"detalle", status:{} };
 
 /* ---------- Lectura de Excel ---------- */
 function readWorkbook(file){
@@ -800,18 +804,22 @@ async function handleFile(which, file){
   if(!file) return;
   try{
     const aoa=await readWorkbook(file);
+    let msg;
     if(which==="t"){
       const p=parseTruput(aoa); state.truput=p;
-      setStatus("t",true,`${file.name} · ${p.n.toLocaleString("es-CO")} filas`);
+      msg=`${file.name} · ${p.n.toLocaleString("es-CO")} filas`;
     }else if(which==="a"){
       const p=parseApunte(aoa); state.apunte=p;
-      setStatus("a",true,`${file.name} · ${p.n.toLocaleString("es-CO")} autoconsumos`);
+      msg=`${file.name} · ${p.n.toLocaleString("es-CO")} autoconsumos`;
     }else{
       const p=parseTraslado(aoa); state.traslado=p;
-      setStatus("s",true,`${file.name} · ${p.n.toLocaleString("es-CO")} facturas enlazadas`);
+      msg=`${file.name} · ${p.n.toLocaleString("es-CO")} facturas enlazadas`;
     }
+    state.status[which]=msg; setStatus(which,true,msg);
     state.results=compute();
-    if(state.results){ refreshMonths(); render(); setUpdated(); toast("Tablero actualizado"); }
+    if(state.results){ refreshMonths(); render(); setUpdated(); }
+    saveData();
+    toast("Tablero actualizado");
   }catch(err){
     if(err && err.missing){
       setStatus(which,false,"Faltan columnas: "+err.missing.join(", "));
@@ -838,6 +846,7 @@ document.getElementById("monthSel").addEventListener("change",e=>{
   state.month=e.target.value;
   state.results=compute();
   render();
+  saveData();
 });
 
 function wireDrop(which){
@@ -913,6 +922,7 @@ document.getElementById("autoFilter").addEventListener("input",e=>renderAutoBody
 
 /* ---------- Última actualización (persistente) ---------- */
 const LS_UPD = "tablero_ultima_actualizacion";
+const LS_DATA = "tablero_datos";
 function showUpdated(d){
   const txt = d.toLocaleString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
   document.getElementById("brandUpdated").textContent = "Actualizado: "+txt;
@@ -930,7 +940,51 @@ function loadUpdated(){
   document.getElementById("brandUpdated").textContent = "Sin actualizar";
 }
 
+/* ---------- Persistencia de datos cargados ---------- */
+function saveData(){
+  try{
+    localStorage.setItem(LS_DATA, JSON.stringify({
+      v:1, truput:state.truput, apunte:state.apunte, traslado:state.traslado,
+      month:state.month, status:state.status
+    }));
+  }catch(e){
+    toast("No se pudieron guardar los datos (demasiado grandes para el navegador)");
+  }
+}
+function loadData(){
+  let raw=null;
+  try{ raw=localStorage.getItem(LS_DATA); }catch(e){}
+  if(!raw) return;
+  let d; try{ d=JSON.parse(raw); }catch(e){ return; }
+  if(d.truput) state.truput=d.truput;
+  if(d.apunte) state.apunte=d.apunte;
+  if(d.traslado) state.traslado=d.traslado;
+  if(d.month) state.month=d.month;
+  state.status=d.status||{};
+  if(state.truput && state.status.t) setStatus("t",true,state.status.t);
+  if(state.apunte && state.status.a) setStatus("a",true,state.status.a);
+  if(state.traslado && state.status.s) setStatus("s",true,state.status.s);
+  state.results=compute();
+  if(state.results){ refreshMonths(); }
+}
+function clearData(){
+  if(!confirm("¿Borrar los datos guardados del tablero? Tendrás que volver a subir los archivos.")) return;
+  try{ localStorage.removeItem(LS_DATA); localStorage.removeItem(LS_UPD); }catch(e){}
+  state.truput=state.apunte=state.traslado=state.results=null; state.status={}; state.month="all";
+  ["t","a","s"].forEach(w=>{
+    const dz=document.getElementById(DZ[w].d);
+    dz.textContent="Arrastra el .xlsx o haz clic para elegirlo"; dz.classList.remove("err");
+    document.getElementById(DZ[w].drop).classList.remove("ready");
+  });
+  document.getElementById("monthBox").hidden=true;
+  document.getElementById("brandUpdated").textContent="Sin actualizar";
+  render();
+  toast("Datos borrados");
+}
+document.getElementById("clearData").addEventListener("click",clearData);
+
 loadUpdated();
+loadData();
 render();
 </script>
 </body>
