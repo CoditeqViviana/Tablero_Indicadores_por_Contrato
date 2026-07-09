@@ -1016,9 +1016,47 @@ function clearData(){
 document.getElementById("clearData").addEventListener("click",clearData);
 document.getElementById("exportData").addEventListener("click",exportConDatos);
 
+/* ---------- Auto-sync desde data/sync.json ---------- */
+async function loadFromServer(){
+  try{
+    const r=await fetch("./data/sync.json",{cache:"no-cache"});
+    if(!r.ok) return;
+    const d=await r.json();
+    /* Solo usar si es más reciente que lo guardado en localStorage */
+    const serverDate=new Date(d.updated);
+    const localRaw=localStorage.getItem(LS_UPD);
+    if(localRaw){
+      const localDate=new Date(localRaw);
+      if(!isNaN(localDate.getTime()) && serverDate<=localDate) return;
+    }
+    let loaded=false;
+    if(d.truput){
+      const p=parseTruput(d.truput); state.truput=p;
+      state.status.t="Sync automático · "+p.n.toLocaleString("es-CO")+" filas";
+      setStatus("t",true,state.status.t); loaded=true;
+    }
+    if(d.apunte){
+      const p=parseApunte(d.apunte); state.apunte=p;
+      state.status.a="Sync automático · "+p.n.toLocaleString("es-CO")+" autoconsumos";
+      setStatus("a",true,state.status.a); loaded=true;
+    }
+    if(d.traslado){
+      const p=parseTraslado(d.traslado); state.traslado=p;
+      state.status.s="Sync automático · "+p.n.toLocaleString("es-CO")+" facturas enlazadas";
+      setStatus("s",true,state.status.s); loaded=true;
+    }
+    if(loaded){
+      state.results=compute();
+      if(state.results){ refreshMonths(); render(); setUpdated(serverDate); saveData(); }
+      toast("Datos actualizados automáticamente desde Odoo");
+    }
+  }catch(e){ /* sync.json no disponible, carga manual sigue funcionando */ }
+}
+
 loadUpdated();
 if(window.EMBEDDED_DATA){ applyData(window.EMBEDDED_DATA); } else { loadData(); }
 render();
+loadFromServer();
 </script>
 </body>
 </html>
